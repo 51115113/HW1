@@ -1,4 +1,4 @@
-##題目一:
+題目一:
 
 #include <iostream>
 using namespace std;
@@ -17,7 +17,7 @@ int main() {
     cout << result << '\n'; // Output: 10
 }
 
-##題目二:
+題目二:
 
 #include <iostream>
 #include <vector>
