@@ -1,23 +1,26 @@
-題目一:
+//題目一
 
 #include <iostream>
 using namespace std;
 
-int recursive_sum(int n) {
+int iterative_sum(int n) {
     if (n < 0)
         throw "Invalid input: n must be non-negative";
-    if (n <= 1)
-        return n;
-    return n + recursive_sum(n - 1);
+
+    int sum = 0;
+    for (int i = 1; i <= n; ++i) {
+        sum += i;
+    }
+    return sum;
 }
 
 int main() {
     int n = 4;
-    int result = recursive_sum(n);
+    int result = iterative_sum(n);
     cout << result << '\n'; // Output: 10
 }
 
-題目二:
+//題目二
 
 #include <iostream>
 #include <vector>
