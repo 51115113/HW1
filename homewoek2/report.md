@@ -28,14 +28,13 @@
 ### 程式實作摘要
 
 ```cpp
-// Polynomial Rewrite - Clean Version
 #include <iostream>
 #include <vector>
 #include <algorithm>
 #include <sstream>
 #include <string>
 
-class Polynomial; // forward declaration
+class Polynomial;
 
 class Term {
     friend class Polynomial;
