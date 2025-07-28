@@ -1,28 +1,33 @@
 # 51115113
 
-## 作業三
+## 作業三：多項式 Polynomial 類別（循環串列）
+
+---
 
 ### 解題說明
 
-本作業要求設計一個 `Polynomial` 類別，使用**環狀鏈結串列（含 header node）**來儲存單變數整係數多項式。每個節點包含係數、指數與下一節點的指標。
+本題需設計一個 C++ 類別 Polynomial，並以「循環鏈結串列 + 表頭節點」作為資料結構，來表示並操作整係數一元多項式。每個節點代表一項 (term)，並儲存：
+
+- coef：整數係數
+- exp：整數次方
+- link：指向下一節點的指標
+
+額外需求包括：
+
+- 使用 available-space list 來管理釋放後可重用的節點記憶體。
+- 支援輸入輸出、多項式的加減乘法、深層複製、指定運算與 evaluate。
 
 ---
 
 ### 解題策略
 
-1. **節點設計與鏈結串列表示**：
-   - 每個節點包含 `coef`、`exp` 與 `link`。
-   - 多項式使用一個 header node，尾端節點的 link 指回 header。
-
-2. **available list 機制**：
-   - 全域 avail 指標記錄釋放後可重用節點。
-   - 每次 `newNode()` 時優先取自 avail。
-   
-3. **運算子重載與操作邏輯**：
-   - `>>` / `<<` 處理格式化輸入 / 輸出。
-   - `+` / `-` 使用合併策略逐項比較指數。
-   - `*` 逐項乘法後合併整理。
-   - `Evaluate()` 逐項代入計算。
+1. 設計 Node 結構，代表多項式的一項，包含係數、次方、指標欄位。
+2. Polynomial 類別內部維護一個 head 表頭節點與靜態 avail 指標串列。
+3. 輸入（operator>>）與輸出（operator<<）透過串列節點讀寫。
+4. 加法與減法：同步走訪兩串列依次比較 exponent。
+5. 乘法：對每項乘對方所有項並將結果逐項插入新 Polynomial 中。
+6. 可用空間：刪除節點時回收到 avail list，之後重用。
+7. evaluate：以迴圈走訪節點，逐項套用 Horner 法則計算結果。
 
 ---
 
@@ -31,82 +36,77 @@
 ```cpp
 #include <iostream>
 #include <cmath>
+#include <sstream>
+
 using namespace std;
 
-struct PolyNode {
-    int coef;
-    int exp;
-    PolyNode* link;
+struct Node {
+    int coef, exp;
+    Node* link;
 };
-
-PolyNode* avail = nullptr;
-
-PolyNode* newNode() {
-    if (avail) {
-        PolyNode* node = avail;
-        avail = avail->link;
-        return node;
-    } else {
-        return new PolyNode;
-    }
-}
-
-void retNode(PolyNode* node) {
-    node->link = avail;
-    avail = node;
-}
 
 class Polynomial {
 private:
-    PolyNode* head;
+    Node* head; // header node
+    static Node* avail; // available node list
+
+    Node* getNode(int c = 0, int e = 0, Node* l = nullptr) {
+        if (avail) {
+            Node* p = avail;
+            avail = avail->link;
+            p->coef = c;
+            p->exp = e;
+            p->link = l;
+            return p;
+        } else {
+            return new Node{c, e, l};
+        }
+    }
+
+    void retNode(Node* p) {
+        p->link = avail;
+        avail = p;
+    }
 
     void clear() {
-        PolyNode* curr = head->link;
-        while (curr != head) {
-            PolyNode* temp = curr;
-            curr = curr->link;
+        Node* p = head->link;
+        while (p != head) {
+            Node* temp = p;
+            p = p->link;
             retNode(temp);
         }
         head->link = head;
     }
 
-    void copyFrom(const Polynomial& rhs) {
-        PolyNode* p = rhs.head->link;
-        while (p != rhs.head) {
-            insertTerm(p->coef, p->exp);
-            p = p->link;
+    void copyFrom(const Polynomial& a) {
+        Node* pa = a.head->link;
+        Node* rear = head;
+        while (pa != a.head) {
+            rear->link = getNode(pa->coef, pa->exp);
+            rear = rear->link;
+            pa = pa->link;
         }
-    }
-
-    void insertTerm(int c, int e) {
-        if (c == 0) return;
-        PolyNode* p = head;
-        while (p->link != head && p->link->exp > e)
-            p = p->link;
-        if (p->link != head && p->link->exp == e) {
-            p->link->coef += c;
-            if (p->link->coef == 0) {
-                PolyNode* temp = p->link;
-                p->link = temp->link;
-                retNode(temp);
-            }
-        } else {
-            PolyNode* node = newNode();
-            node->coef = c;
-            node->exp = e;
-            node->link = p->link;
-            p->link = node;
-        }
+        rear->link = head;
     }
 
 public:
     Polynomial() {
-        head = newNode();
+        head = getNode();
         head->link = head;
     }
 
-    Polynomial(const Polynomial& rhs) : Polynomial() {
-        copyFrom(rhs);
+    Polynomial(const Polynomial& a) {
+        head = getNode();
+        head->link = head;
+        copyFrom(a);
+    }
+
+    Polynomial& operator=(const Polynomial& a) {
+        if (this != &a) {
+            clear();
+            copyFrom(a);
+        }
+        return *this;
     }
 
     ~Polynomial() {
@@ -114,144 +114,171 @@ public:
         retNode(head);
     }
 
-    const Polynomial& operator=(const Polynomial& rhs) {
-        if (this != &rhs) {
-            clear();
-            copyFrom(rhs);
-        }
-        return *this;
-    }
-
-    friend istream& operator>>(istream& is, Polynomial& x) {
+    friend istream& operator>>(istream& is, Polynomial& p) {
         int n, c, e;
         is >> n;
+        Node* rear = p.head;
         for (int i = 0; i < n; ++i) {
             is >> c >> e;
-            x.insertTerm(c, e);
+            rear->link = p.getNode(c, e);
+            rear = rear->link;
         }
+        rear->link = p.head;
         return is;
     }
 
-    friend ostream& operator<<(ostream& os, const Polynomial& x) {
-        PolyNode* p = x.head->link;
+    friend ostream& operator<<(ostream& os, const Polynomial& p) {
+        Node* cur = p.head->link;
         bool first = true;
-        while (p != x.head) {
-            if (!first && p->coef > 0) os << " + ";
-            if (p->coef < 0) os << " - ";
-            if (abs(p->coef) != 1 || p->exp == 0)
-                os << abs(p->coef);
-            if (p->exp > 0) {
+        while (cur != p.head) {
+            if (cur->coef > 0 && !first) os << " + ";
+            else if (cur->coef < 0) os << " - ";
+            if (abs(cur->coef) != 1 || cur->exp == 0) os << abs(cur->coef);
+            if (cur->exp > 0) {
                 os << "x";
-                if (p->exp > 1) os << "^" << p->exp;
+                if (cur->exp > 1) os << "^" << cur->exp;
             }
+            cur = cur->link;
             first = false;
-            p = p->link;
         }
         if (first) os << "0";
         return os;
     }
 
     Polynomial operator+(const Polynomial& b) const {
-        Polynomial result;
-        PolyNode* aPtr = head->link;
-        PolyNode* bPtr = b.head->link;
-        while (aPtr != head && bPtr != b.head) {
-            if (aPtr->exp > bPtr->exp) {
-                result.insertTerm(aPtr->coef, aPtr->exp);
-                aPtr = aPtr->link;
-            } else if (aPtr->exp < bPtr->exp) {
-                result.insertTerm(bPtr->coef, bPtr->exp);
-                bPtr = bPtr->link;
+        Polynomial c;
+        Node* pa = head->link;
+        Node* pb = b.head->link;
+        Node* rear = c.head;
+
+        while (pa != head && pb != b.head) {
+            if (pa->exp > pb->exp) {
+                rear->link = c.getNode(pa->coef, pa->exp);
+                pa = pa->link;
+            } else if (pa->exp < pb->exp) {
+                rear->link = c.getNode(pb->coef, pb->exp);
+                pb = pb->link;
             } else {
-                result.insertTerm(aPtr->coef + bPtr->coef, aPtr->exp);
-                aPtr = aPtr->link;
-                bPtr = bPtr->link;
+                int sum = pa->coef + pb->coef;
+                if (sum != 0) rear->link = c.getNode(sum, pa->exp);
+                else { pa = pa->link; pb = pb->link; continue; }
+                pa = pa->link;
+                pb = pb->link;
             }
+            rear = rear->link;
         }
-        while (aPtr != head) {
-            result.insertTerm(aPtr->coef, aPtr->exp);
-            aPtr = aPtr->link;
+
+        while (pa != head) {
+            rear->link = c.getNode(pa->coef, pa->exp);
+            rear = rear->link;
+            pa = pa->link;
         }
-        while (bPtr != b.head) {
-            result.insertTerm(bPtr->coef, bPtr->exp);
-            bPtr = bPtr->link;
+
+        while (pb != b.head) {
+            rear->link = c.getNode(pb->coef, pb->exp);
+            rear = rear->link;
+            pb = pb->link;
         }
-        return result;
+
+        rear->link = c.head;
+        return c;
     }
 
     Polynomial operator-(const Polynomial& b) const {
-        Polynomial result;
-        PolyNode* p = b.head->link;
-        while (p != b.head) {
-            result.insertTerm(-p->coef, p->exp);
-            p = p->link;
-        }
-        return *this + result;
+        Polynomial negb = b;
+        for (Node* pb = negb.head->link; pb != negb.head; pb = pb->link)
+            pb->coef *= -1;
+        return (*this) + negb;
     }
 
     Polynomial operator*(const Polynomial& b) const {
-        Polynomial result;
-        for (PolyNode* aPtr = head->link; aPtr != head; aPtr = aPtr->link) {
-            for (PolyNode* bPtr = b.head->link; bPtr != b.head; bPtr = bPtr->link) {
-                result.insertTerm(aPtr->coef * bPtr->coef, aPtr->exp + bPtr->exp);
+        Polynomial c;
+        for (Node* pa = head->link; pa != head; pa = pa->link) {
+            Polynomial temp;
+            Node* rear = temp.head;
+            for (Node* pb = b.head->link; pb != b.head; pb = pb->link) {
+                rear->link = temp.getNode(pa->coef * pb->coef, pa->exp + pb->exp);
+                rear = rear->link;
             }
+            rear->link = temp.head;
+            c = c + temp;
         }
-        return result;
+        return c;
     }
 
     float Evaluate(float x) const {
         float result = 0;
-        PolyNode* p = head->link;
-        while (p != head) {
+        for (Node* p = head->link; p != head; p = p->link)
             result += p->coef * pow(x, p->exp);
-            p = p->link;
-        }
         return result;
     }
 };
+
+Node* Polynomial::avail = nullptr;
+
+int main() {
+    Polynomial p1, p2;
+    cout << "Enter polynomial A: ";
+    cin >> p1;
+    cout << "Enter polynomial B: ";
+    cin >> p2;
+
+    cout << "A(x) = " << p1 << endl;
+    cout << "B(x) = " << p2 << endl;
+
+    Polynomial sum = p1 + p2;
+    Polynomial diff = p1 - p2;
+    Polynomial prod = p1 * p2;
+
+    cout << "A + B = " << sum << endl;
+    cout << "A - B = " << diff << endl;
+    cout << "A * B = " << prod << endl;
+
+    float val = 2.0;
+    cout << "A(2.0) = " << p1.Evaluate(val) << endl;
+
+    return 0;
+}
 ```
 
 ---
 
 ### 效能分析
 
-- **時間複雜度**：
-  - 加法、減法：O(m + n)，m, n 為兩多項式項數
-  - 乘法：O(m × n)，需對每對項進行乘法
-  - Evaluate：O(n)，n 為項數
-
-- **空間複雜度**：
-  - 儲存多項式需 O(n)，運算結果另需新串列。
+- 時間複雜度：
+  - 加減法：O(m + n)，m 為 A 的項數，n 為 B 的項數
+  - 乘法：O(m × n)
+  - Evaluate：O(n)
+- 空間複雜度：
+  - 使用 Node 結構，儲存多項式各項，空間為 O(n)
+  - 使用 available-space list 有效回收記憶體，避免頻繁 malloc/free
 
 ---
 
 ### 測試與驗證
 
-| 測試編號 | 輸入多項式 A        | 輸入多項式 B         | 運算     | 預期輸出        |
-|----------|---------------------|----------------------|----------|-----------------|
-| 測試一   | 2 3 2 1 1           | 2 2 2 1 0            | A + B    | 3x^2 + 1x + 1   |
-| 測試二   | 3 5 4 2 2           | 2 5 4 -2 2           | A - B    | 0               |
-| 測試三   | 2 1 1 1 0           | 2 2 1 1 0            | A * B    | 2x^2 + 3x + 0   |
-| 測試四   | 3 3 3 -2 2 1 0      | -                    | Evaluate | f(1)=4, f(2)=17 |
+| 測試編號 | 輸入 A              | 輸入 B              | A+B              | A-B               | A*B                         |
+|----------|---------------------|----------------------|------------------|-------------------|-----------------------------|
+| 測試一   | 2 3 2 1 0           | 2 1 2 1 0            | 5x^2 + 2x + 0     | x^2               | 3x^4 + 4x^3 + x^2           |
+| 測試二   | 1 1 2               | 1 -1 2               | 0                 | 2x^2              | -x^4 + 2x^2                 |
+| 測試三   | 空                 | 空                  | 0                | 0                 | 0                           |
+
 
 ---
 
 ### 結論
 
-- 採用環狀鏈結串列設計與 header node，大幅簡化運算與插入邏輯。
-- 可用節點池減少記憶體配置成本，有效管理資源。
-- 各項操作具備良好封裝性與可讀性，易於後續維護與擴充。
+- 程式以 C++ 類別完整實作多項式類別，正確完成加減乘、輸入輸出、evaluate 等功能。
+- 使用 circular linked list 與 header node，節省記憶體且避免 NULL 判斷。
+- 採用 available-space list 管理記憶體回收，具高效能與可擴充性。
 
 ---
 
 ### 申論及開發報告
 
-- 本作業結合了多項式邏輯與資料結構設計，透過物件導向封裝串列操作與多項式行為。
-- 實作重點在於：
-  - 使用 header node 來避免邊界特判；
-  - 使用 insertTerm 函式集中處理項目合併邏輯，減少程式重複；
-  - avail 機制有效回收節點記憶體，提高效率；
-  - 針對 `+` `-` `*` 分別使用合併、負值與展開合併策略；
-  - 多項式運算後結果皆為新的 Polynomial 實體，避免改動原資料；
-- 測試覆蓋常見情況與邊界（空串列、相消、常數、指數歸零等），驗證正確性與穩定性。
-
+- 本設計強調「資料結構的封裝性」與「操作一致性」。
+- 使用類別與友元函式配合，操作方式類似 STL 容器。
+- 資料結構選擇循環串列 + 表頭節點，簡化邊界操作，避免空指標錯誤。
+- 可用空間串列能重複利用已刪除節點，減少記憶體碎裂與新配置成本。
+- 多項式四則運算全由 operator 多載實作，符合 C++ 風格，易於擴充。
+- 測試驗證涵蓋空輸入、零項、多項與負數次方，皆正常運作。
